@@ -36,18 +36,26 @@ DHT dht(2, DHT11);
 
 const byte ventilateur = 13;
 const int capteur_humidity_sol = A0;
-const int seuil_humidity = 300;
+// const int seuil_humidity = 300;
 const int relais = 5;
+
+bool porte;
+bool v ;
+bool existe = false;
+bool vib = false;
+bool p ;  
+bool ledState;
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT); 
   pinMode(ventilateur, OUTPUT); 
+  
   pinMode(capteur_humidity_sol,INPUT);
   pinMode(relais,OUTPUT);
   servo.attach(D0);
   pinMode(D2,INPUT);
   pinMode(D3,OUTPUT);
-  pinMode(13,OUTPUT);
+  pinMode(15,OUTPUT);
   dht.begin();
 
   Serial.begin(115200);
@@ -84,43 +92,50 @@ void setup() {
 
   Firebase.setDoubleDigits(5);
 
-  config.timeout.serverResponse = 10 * 1000;
+  //config.timeout.serverResponse = 10 * 1000;
 
-
+  digitalWrite(ventilateur,LOW);
+  digitalWrite(relais,LOW);
 }
 
 void loop() {
-  float h = dht.readHumidity();                                
+
+
+  // if (Firebase.ready() && (millis() - sendDataPrevMillis > 1000 || sendDataPrevMillis == 0))
+  // {
+
+  // }
+
+    float h = dht.readHumidity();                                
   float t = dht.readTemperature();                              
   
-  // if (isnan(h) || isnan(t))                                     
-  // {                                   
-  //   Serial.println(F("Failed to read from DHT sensor!"));
-  //   return;
-  // } 
+  if (isnan(h) || isnan(t))                                     
+  {                                   
+    Serial.println(F("Failed to read from DHT sensor!"));
+    return;
+  } 
   String fireHumid = String(h) + String("%");    
   String fireTemp = String(t) + String("°C");                  //Temperature integer to string conversion
-  delay(1000);
+  // delay(1000);
 
   int hum_sol = analogRead(capteur_humidity_sol);
-
-  // Firebase.ready() should be called repeatedly to handle authentication tasks.
-  if (Firebase.ready() && (millis() - sendDataPrevMillis > 1000 || sendDataPrevMillis == 0))
-  {
-    sendDataPrevMillis = millis();  
-  int ledState;
-   if(Firebase.RTDB.getInt(&fbdo, "/led/state", &ledState)){
-    digitalWrite(LED_BUILTIN, !ledState);
+    //sendDataPrevMillis = millis();  
+   if(Firebase.RTDB.getBool(&fbdo, "/led/status", &ledState)){
+    if(ledState){
+      digitalWrite(15, HIGH);
+    }else{
+      digitalWrite(15, LOW);
+    }
+    
    }
-  //  if(Firebase.RTDB.setString(&fbdo, "/dht/temp", fireTemp)){
-  //   Serial.println(fireTemp);
-  //  }
+   if(Firebase.RTDB.setString(&fbdo, "/dht/temp", fireTemp)){
+    Serial.println(fireTemp);
+   }
    if(Firebase.RTDB.setString(&fbdo, "/dht/humid", fireHumid)){
     Serial.println(fireHumid);
    }
-   bool v = false;
+   
   if(Firebase.RTDB.getBool(&fbdo, "/dht/ventil", &v)){
-    
     if(v){
       digitalWrite(ventilateur,HIGH);
       Serial.println("high");
@@ -130,74 +145,64 @@ void loop() {
 
     }
    }
-   
+    if(v){
+      digitalWrite(ventilateur,HIGH);
+      Serial.println("high");
+    }else{
+      digitalWrite(ventilateur,LOW);
+      Serial.println("low");
+
+    }
   if(Firebase.RTDB.setInt(&fbdo, "/arrosage/sol", hum_sol)){
-    bool p ;
+    
     if(Firebase.RTDB.getBool(&fbdo, "/arrosage/pompe", &p)){
-      if(p || hum_sol <= seuil_humidity){
+      if(p){
         digitalWrite(relais, HIGH);
+        Serial.println("pompe actif");
       }else{
         digitalWrite(relais, LOW);
+        Serial.println("pompe ferme");
       }
    }
-    Serial.println(hum_sol);
+    // Serial.println(hum_sol);
    }
-   bool porte;
-   if(Firebase.RTDB.getBool(&fbdo, "/porte", &porte)){
+  
+  
+  if(Firebase.RTDB.getBool(&fbdo, "/porte/status", &porte)){
     if(!porte){
       servo.write(0);
-      Serial.println("la porte est ferme");
+       Serial.println("la porte est ferme");
     }else{
       servo.write(150);
       Serial.println("la porte est ouverte") ;
     }
     
    }
-  if(Firebase.RTDB.getBool(&fbdo, "/auth/status", &porte)){
-    if(!porte){
-      servo.write(0);
-      Serial.println("la porte est ferme");
-    }else{
-      servo.write(150);
-      Serial.println("la porte est ouverte") ;
-    }
-    
-   }
-   bool vib = false;
   if(digitalRead(D2) ==1){
     digitalWrite(D3,HIGH);
     vib = true;
-    if(Firebase.RTDB.setBool(&fbdo, "/vibration", vib)){
-      Serial.println("vibration");
-    }
   }else if (digitalRead(D2) ==0){
     digitalWrite(D3,LOW);
     vib = false ;
-    if(Firebase.RTDB.setBool(&fbdo, "/vibration", vib)){
-      Serial.println("non vibration");
-    }
   }
+  Firebase.RTDB.setBool(&fbdo, "/vibration/status", vib);
+    
   int dist = ultrasonic.Ranging(CM);
-  bool existe = false;
-  if(dist < 7){
-    digitalWrite(13,HIGH);
+  Serial.println(dist);
+  if(dist < 10){
+    // digitalWrite(13,HIGH);
      existe = true;
-    if(Firebase.RTDB.setBool(&fbdo, "/chambre/status", existe)){
-     
-      Serial.println("chambre vide");
-  }
-  }else if (dist>7){
-
-    digitalWrite(13,LOW);
+     Serial.println("chambre non vide");
+  }else if (dist>10){
+    // digitalWrite(13,LOW);
     existe = false;
-    if(Firebase.RTDB.setBool(&fbdo, "/chambre/status", existe)){
-      
-      Serial.println("chambre vide");
+    Serial.println("chambre vide");
   }
-  }
+  
 
+  
    else{
     Serial.println(fbdo.errorReason().c_str());
    }
-  }
+   Firebase.RTDB.setBool(&fbdo, "/chambre/status", existe);
 }
