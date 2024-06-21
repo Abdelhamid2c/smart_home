@@ -206,3 +206,4 @@ void loop() {
    }
    Firebase.RTDB.setBool(&fbdo, "/chambre/status", existe);
 }
+//python -m esptool --chip  esp8266 --port COM8 erase_flash
